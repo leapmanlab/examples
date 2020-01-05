@@ -10,6 +10,8 @@ import tarfile
 from tqdm import tqdm
 import zipfile
 
+from typing import Optional
+
 # Last updated 12:01 02 January 2020
 dataset_info = {
     'url': "https://www.dropbox.com/s/68yclbraqq1diza/platelet_data_1219.zip?dl=1",
@@ -26,13 +28,14 @@ download_md5s = {
     'test-labels.tif': 'dd21ca5031d74b6f8be9f954e8fe7eac',
     'train-error-weights.tif': 'dd30e90f77b2141dd01ab7b76e238163'}
 
-def download_if_missing(download_dir: str):
+
+def download_data_if_missing(download_dir: str):
     """Download the data used in (Guay et al., 2019) to a specified
     download directory.
 
     Args:
         download_dir (str): Directory in which data will be downloaded
-        	and extracted.
+            and extracted.
 
     Returns: None
 
@@ -48,6 +51,40 @@ def download_if_missing(download_dir: str):
             md5=dataset_info['md5'])
 
     pass
+
+
+def download_model(
+        model_url: str,
+        download_dir: str,
+        model_dir_name: Optional[str] = None) -> str:
+    """Download a trained LCIMB segmentation model. Basically the same as
+    `download.download_and_extract` below.
+
+    Args:
+        model_url (str): URL pointing to a ZIP folder containing a trained
+            model's files.
+        download_dir (str): Local directory to download the model into.
+        model_dir_name (Optional[str]): Name of the extracted model dir within
+            `download_dir`. By default, takes the basename from the URL.
+
+    Returns:
+        model_dir (str): Path to the downloaded model dir.
+
+    """
+    download_dir = os.path.expanduser(download_dir)
+    os.makedirs(download_dir, exist_ok=True)
+    if not model_dir_name:
+        model_dir_name = os.path.basename(model_url).split('.')[0]
+    download_name = model_dir_name + '.zip'
+
+    download_url(model_url, download_dir, download_name, md5=None, report=False)
+
+    archive = os.path.join(download_dir, download_name)
+    extract_archive(archive, download_dir, remove_finished=True)
+
+    model_dir = os.path.join(download_dir, model_dir_name)
+    return model_dir
+
 
 def verify_download(download_dir: str) -> bool:
     """Verify an existing download matches the data used in
@@ -140,7 +177,7 @@ def makedir_exist_ok(dirpath):
             raise
 
 
-def download_url(url, root, filename=None, md5=None):
+def download_url(url, root, filename=None, md5=None, report=True):
     """Download a file from a url and place it in root.
 
     Args:
@@ -158,6 +195,8 @@ def download_url(url, root, filename=None, md5=None):
 
     makedir_exist_ok(root)
 
+    f_report = gen_bar_updater if report else lambda: None
+
     # downloads file
     if check_integrity(fpath, md5):
         print('Using downloaded and verified file: ' + fpath)
@@ -166,7 +205,7 @@ def download_url(url, root, filename=None, md5=None):
             print('Downloading ' + url + ' to ' + fpath)
             urllib.request.urlretrieve(
                 url, fpath,
-                reporthook=gen_bar_updater()
+                reporthook=f_report()
             )
         except (urllib.error.URLError, IOError) as e:
             if url[:5] == 'https':
@@ -175,7 +214,7 @@ def download_url(url, root, filename=None, md5=None):
                       ' Downloading ' + url + ' to ' + fpath)
                 urllib.request.urlretrieve(
                     url, fpath,
-                    reporthook=gen_bar_updater()
+                    reporthook=f_report()
                 )
             else:
                 raise e
@@ -235,6 +274,4 @@ def download_and_extract(url,
     download_url(url, download_root, filename, md5)
 
     archive = os.path.join(download_root, filename)
-    print("Extracting {} to {}".format(archive, download_root))
     extract_archive(archive, download_root, remove_finished)
-    print("Finished")
